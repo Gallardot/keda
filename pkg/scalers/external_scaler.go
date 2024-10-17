@@ -35,7 +35,6 @@ type externalPushScaler struct {
 
 type externalScalerMetadata struct {
 	scalerAddress    string
-	tlsCertFile      string
 	originalMetadata map[string]string
 	triggerIndex     int
 	caCert           string
@@ -105,9 +104,7 @@ func NewExternalPushScaler(config *scalersconfig.ScalerConfig) (PushScaler, erro
 }
 
 func parseExternalScalerMetadata(config *scalersconfig.ScalerConfig) (externalScalerMetadata, error) {
-	meta := externalScalerMetadata{
-		originalMetadata: config.TriggerMetadata,
-	}
+	meta := externalScalerMetadata{}
 
 	// Check if scalerAddress is present
 	if val, ok := config.TriggerMetadata["scalerAddress"]; ok && val != "" {
@@ -116,11 +113,6 @@ func parseExternalScalerMetadata(config *scalersconfig.ScalerConfig) (externalSc
 		return meta, fmt.Errorf("scaler Address is a required field")
 	}
 
-	if val, ok := config.TriggerMetadata["tlsCertFile"]; ok && val != "" {
-		meta.tlsCertFile = val
-	}
-
-	meta.originalMetadata = make(map[string]string)
 	if val, ok := config.AuthParams["caCert"]; ok {
 		meta.caCert = val
 	}
@@ -142,6 +134,7 @@ func parseExternalScalerMetadata(config *scalersconfig.ScalerConfig) (externalSc
 		meta.unsafeSsl = boolVal
 	}
 	// Add elements to metadata
+	meta.originalMetadata = make(map[string]string)
 	for key, value := range config.TriggerMetadata {
 		// Check if key is in resolved environment and resolve
 		if strings.HasSuffix(key, "FromEnv") {
@@ -235,6 +228,7 @@ func (s *externalScaler) GetMetricsAndActivity(ctx context.Context, metricName s
 	return metrics, isActiveResponse.Result, nil
 }
 
+// Run starts the external push scaler and manages the active state of the scaler.
 // handleIsActiveStream is the only writer to the active channel and will close it on return.
 func (s *externalPushScaler) Run(ctx context.Context, active chan<- bool) {
 	defer close(active)
@@ -306,19 +300,6 @@ func getClientForConnectionPool(metadata externalScalerMetadata, logger logr.Log
 	defer connectionPoolMutex.Unlock()
 
 	buildGRPCConnection := func(metadata externalScalerMetadata) (*grpc.ClientConn, error) {
-		// FIXME: DEPRECATED to be removed in v2.13 https://github.com/kedacore/keda/issues/4549
-		if metadata.tlsCertFile != "" {
-			logger.V(1).Info("tlsCertFile in ScaleObject metadata will be deprecated in v2.12. Please use" +
-				"tlsClientCert, tlsClientKey and caCert in TriggerAuthentication instead.")
-			creds, err := credentials.NewClientTLSFromFile(metadata.tlsCertFile, "")
-			if err != nil {
-				return nil, err
-			}
-			return grpc.NewClient(metadata.scalerAddress,
-				grpc.WithDefaultServiceConfig(grpcConfig),
-				grpc.WithTransportCredentials(creds))
-		}
-
 		tlsConfig, err := util.NewTLSConfig(metadata.tlsClientCert, metadata.tlsClientKey, metadata.caCert, metadata.unsafeSsl)
 		if err != nil {
 			return nil, err

@@ -196,7 +196,7 @@ func RecordCloudEventQueueStatus(namespace string, value int) {
 	}
 }
 
-// Returns the ServerMetrics object for GRPC Server metrics. Used to initialize the GRPC server with the proper intercepts
+// GetServerMetrics Returns the ServerMetrics object for GRPC Server metrics. Used to initialize the GRPC server with the proper intercepts
 // Currently, only Prometheus metrics are supported.
 func GetServerMetrics() *grpcprom.ServerMetrics {
 	return promServerMetrics
